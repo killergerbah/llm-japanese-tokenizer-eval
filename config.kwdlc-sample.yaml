@@ -1,0 +1,11 @@
+# Offline smoke-test config for KWDLC (KNP) parsing; uses a tiny fixture.
+extends: config.yaml
+
+dataset:
+  source: knp
+  config: kwdlc-sample
+  path: tests/fixtures/kwdlc/knp
+  ids_path: tests/fixtures/kwdlc/test.id
+
+results_dir: results-kwdlc
+bootstrap: 200

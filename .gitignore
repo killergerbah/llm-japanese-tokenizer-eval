@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+results*/
+data/gold/*/raw/
+data/gold/*/gold.jsonl
+.DS_Store

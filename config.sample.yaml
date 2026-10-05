@@ -1,0 +1,24 @@
+# Offline smoke-test config: gold from a bundled CoNLL-U fixture, no network.
+dataset:
+  source: conllu
+  config: sample
+  path: tests/fixtures/sample.conllu
+
+gold_dir: data/gold
+results_dir: results
+prompt: prompts/segment_ja.txt
+seed: 1234
+bootstrap: 200
+
+llm:
+  temperature: 0.0
+  top_p: 1.0
+  max_tokens: 512
+  retries: 1
+
+models:
+  - name: qwen2.5:7b
+    base_url: http://localhost:11434/v1
+    api_key_env: OLLAMA_API_KEY
+    tier: local
+    enabled: true

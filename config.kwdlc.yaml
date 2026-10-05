@@ -1,0 +1,19 @@
+# KWDLC (Kyoto University Web Document Leads Corpus) gold.
+#
+# Annotated to the JUMAN/KNP standard (manually corrected), not UniDic, and from
+# web text. Unlike UD-Japanese, MeCab+UniDic gets neither the convention nor the
+# domain for free, so this is the fairness check for the segmentation benchmark.
+#
+# Data (not committed): clone and pin, then run `tok-eval prepare`.
+#   git clone https://github.com/ku-nlp/KWDLC data/gold/kwdlc/raw
+#   git -C data/gold/kwdlc/raw checkout c6ae49d29eca4e1134c6676d682adf5ed6a25f5a
+#
+# Note: KWDLC has no declared license (research use); do not redistribute.
+extends: config.yaml
+
+dataset:
+  source: knp
+  config: kwdlc
+  path: data/gold/kwdlc/raw/knp
+  ids_path: data/gold/kwdlc/raw/id/split_for_pas/test.id
+  revision: c6ae49d29eca4e1134c6676d682adf5ed6a25f5a

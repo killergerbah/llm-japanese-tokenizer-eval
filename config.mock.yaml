@@ -1,0 +1,22 @@
+dataset:
+  source: conllu
+  config: sample
+  path: tests/fixtures/sample.conllu
+
+gold_dir: data/gold
+results_dir: results-mock
+prompt: prompts/segment_ja.txt
+seed: 1234
+bootstrap: 200
+
+llm:
+  temperature: 0.0
+  top_p: 1.0
+  max_tokens: 512
+
+models:
+  - name: mock-mecab
+    base_url: http://127.0.0.1:8731/v1
+    api_key_env: MOCK_API_KEY
+    tier: local
+    enabled: true

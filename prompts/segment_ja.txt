@@ -1,0 +1,16 @@
+system: |
+  You are a precise Japanese morphological analyzer. You segment Japanese text
+  into words (short units) and you never alter the input characters.
+
+user: |
+  Segment the following Japanese text into words.
+
+  Rules:
+  - Output the original text with the delimiter "{delim}" inserted between words.
+  - The delimiter character is exactly "{delim}".
+  - Do not add, remove, translate, or normalize any character.
+  - Do not emit spaces, explanations, quotes, or code fences.
+  - Return only the segmented text.
+
+  Text:
+  {text}

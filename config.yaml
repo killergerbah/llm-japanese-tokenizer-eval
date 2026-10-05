@@ -1,0 +1,82 @@
+# Configuration for the Japanese segmentation benchmark.
+#
+# dataset.source:
+#   hf      -> HuggingFace `datasets` (requires the [gold] extra)
+#   conllu  -> local .conllu file or directory (pinned, offline-friendly)
+dataset:
+  source: hf
+  name: universal-dependencies/universal_dependencies
+  config: ja_gsd          # treebank id, also used as the results sub-folder
+  split: test
+  revision: c3fed78df6b9f8cd27ed24cc7142e9eccf1e6703  # Hub commit (UD 2.18)
+  path: null              # used when source: conllu (file or directory)
+
+gold_dir: data/gold
+results_dir: results
+prompt: prompts/segment_ja.txt
+
+llm:
+  temperature: 0.0
+  top_p: 1.0
+  max_tokens: 256
+  retries: 1
+  lemmas: false           # set true, or pass --lemmas, to predict lemmas too
+  reasoning_effort: null  # global default; per-model override below
+  batch_size: null        # null = single-sentence reference; N = batch ablation
+
+# Local models are non-reasoning, one per family. Reasoning models (gpt-oss,
+# qwen3, deepseek-r1) are excluded: they spend hundreds of hidden tokens per
+# sentence and make the benchmark ~10x slower for no segmentation benefit.
+#
+# `api: ollama` uses Ollama's native /api/chat so per-call timings (tokens/s)
+# are recorded. `num_ctx` caps the context (needed for large models to fit).
+# Remote models are opt-in: pass --models <name> and provide the key.
+models:
+  - name: llama3.1:8b
+    base_url: http://localhost:11434/v1
+    api: ollama
+    api_key_env: OLLAMA_API_KEY
+    tier: local
+    enabled: true
+
+  - name: mistral-small3.1:24b
+    base_url: http://localhost:11434/v1
+    api: ollama
+    api_key_env: OLLAMA_API_KEY
+    tier: local
+    enabled: true
+
+  - name: gemma3:27b
+    base_url: http://localhost:11434/v1
+    api: ollama
+    api_key_env: OLLAMA_API_KEY
+    num_ctx: 4096
+    tier: local
+    enabled: true
+
+  - name: qwen2.5:32b
+    base_url: http://localhost:11434/v1
+    api: ollama
+    api_key_env: OLLAMA_API_KEY
+    num_ctx: 4096          # ~20GB weights; cap context so it fits in VRAM
+    tier: local
+    enabled: true
+
+  - name: opencode-go/deepseek-v4.1-flash   # display label (the --models key)
+    model: deepseek-v4.1-flash               # id sent to the API
+    base_url: https://opencode.ai/zen/go/v1  # OpenCode Go (same key as Zen)
+    api_key_env: OPENCODE_API_KEY
+    requires_api_key: true
+    extra_headers: {User-Agent: llm-tok-eval/0.1.0, x-opencode-session: llm-tok-eval}
+    reasoning_effort: none  # disable thinking; OpenCode Go defaults to reasoning on
+    tier: remote
+    enabled: false         # run explicitly: --models opencode-go/deepseek-v4.1-flash
+
+  - name: sakana-namazu
+    base_url: https://api.sakana.ai/v1
+    api_key_env: SAKANA_API_KEY
+    requires_api_key: true
+    extra_body: {chat_template_kwargs: {thinking: false}}  # disable reasoning
+    tier: remote
+    enabled: false         # run explicitly: --models sakana-namazu
+    disable_tools: true

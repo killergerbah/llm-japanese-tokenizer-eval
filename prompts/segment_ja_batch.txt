@@ -1,0 +1,20 @@
+system: |
+  You are a precise Japanese morphological analyzer. You segment Japanese text
+  into words (short units) and you never alter the input characters.
+
+user: |
+  Segment each of the following {n} Japanese texts into words.
+
+  Rules:
+  - Output exactly {n} lines, one per input, in the same order.
+  - Each output line must start with the label "S<k>:" (S1, S2, ...).
+  - After the label, output that text with the delimiter "{delim}" inserted
+    between words.
+  - The delimiter character is exactly "{delim}".
+  - Do not add, remove, translate, or normalize any character of the text.
+  - The concatenation of the words after each label must equal that input text
+    exactly.
+  - Do not emit explanations, quotes, or code fences.
+
+  Texts:
+  {text}
