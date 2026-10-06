@@ -56,8 +56,11 @@ def _bar_metric(
     return True
 
 
-def _grouped_recall(df, out: Path) -> bool:
+def _grouped_recall(df, out: Path, reference_only: bool = False) -> bool:
     sub = df[(df["metric"] == "word_recall") & (df["category"] != "all")].copy()
+    if reference_only:
+        sub = sub[~sub["model"].astype(str).str.contains("@b", regex=False)]
+        sub = sub[~sub["model"].astype(str).str.endswith("@lem")]
     if sub.empty:
         return False
     import matplotlib
@@ -194,6 +197,57 @@ def _cross_treebank(df, metric: str, out: Path, title: str) -> bool:
     return True
 
 
+def _summary_cross(df, metric: str, out: Path, title: str, keep) -> bool:
+    """Cross-treebank bars for a filtered set of single-sentence arms.
+
+    Unlike :func:`_cross_treebank`, arms are filtered with ``keep`` and only
+    models present in *every* treebank are drawn, so missing arms never appear
+    as misleading zero bars.
+    """
+    if "treebank" not in df.columns:
+        return False
+    sub = df[(df["metric"] == metric) & (df["category"] == "all")].copy()
+    sub = sub[sub["model"].astype(str).map(keep)]
+    sub = sub.drop_duplicates(subset=["treebank", "model"])
+    if sub.empty or sub["treebank"].nunique() < 2:
+        return False
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    treebanks = sorted(sub["treebank"].unique())
+    models = [
+        m
+        for m in sorted(sub["model"].unique())
+        if all(((sub["treebank"] == tb) & (sub["model"] == m)).any() for tb in treebanks)
+    ]
+    if not models:
+        return False
+    width = 0.8 / len(treebanks)
+    x = np.arange(len(models))
+    fig, ax = plt.subplots(figsize=(max(6, len(models) * 1.2), 4.5))
+    for i, tb in enumerate(treebanks):
+        vals = []
+        for m in models:
+            row = sub[(sub["treebank"] == tb) & (sub["model"] == m)]
+            vals.append(float(row["value"].iloc[0]) if not row.empty else 0.0)
+        ax.bar(x + i * width, vals, width, label=tb)
+    ax.set_xticks(x + width * (len(treebanks) - 1) / 2)
+    ax.set_xticklabels(models, rotation=30, ha="right")
+    ax.set_ylim(0, 1)
+    ax.set_ylabel(metric.replace("_", " "))
+    ax.set_title(title)
+    ax.grid(axis="y", alpha=0.3)
+    ax.legend(title="treebank")
+    fig.tight_layout()
+    fig.savefig(out.with_suffix(".svg"))
+    fig.savefig(out.with_suffix(".png"), dpi=150)
+    plt.close(fig)
+    return True
+
+
 def run(cfg: Config, all_treebanks: bool = False) -> None:
     df = _load_df(cfg)
     if df is None:
@@ -232,6 +286,10 @@ def run(cfg: Config, all_treebanks: bool = False) -> None:
         made.append("empty_content_rate")
     if _grouped_recall(cur, fig_dir / "word_recall_by_category"):
         made.append("word_recall_by_category")
+    if _grouped_recall(
+        cur, fig_dir / "main_word_recall_by_category", reference_only=True
+    ):
+        made.append("main_word_recall_by_category")
     if _batch_lines(cur, "word_f1", fig_dir / "batch_word_f1", "Exact-word F1 vs batch size"):
         made.append("batch_word_f1")
     if _batch_lines(
@@ -250,6 +308,30 @@ def run(cfg: Config, all_treebanks: bool = False) -> None:
     ):
         made.append("position_boundary_f1")
     if all_treebanks:
+        if _summary_cross(
+            df,
+            "word_f1",
+            fig_dir / "main_word_f1",
+            "Exact-word F1 by treebank (single-sentence reference)",
+            lambda m: "@b" not in m and "@lem" not in m,
+        ):
+            made.append("main_word_f1")
+        if _summary_cross(
+            df,
+            "boundary_f1",
+            fig_dir / "main_boundary_f1",
+            "Boundary F1 by treebank (single-sentence reference)",
+            lambda m: "@b" not in m and "@lem" not in m,
+        ):
+            made.append("main_boundary_f1")
+        if _summary_cross(
+            df,
+            "lemma_accuracy",
+            fig_dir / "main_lemma_accuracy",
+            "Lemma accuracy by treebank (single-sentence reference)",
+            lambda m: "@b" not in m,
+        ):
+            made.append("main_lemma_accuracy")
         if _cross_treebank(df, "word_f1", fig_dir / "cross_word_f1", "Exact-word F1 by treebank"):
             made.append("cross_word_f1")
         if _cross_treebank(

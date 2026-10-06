@@ -86,6 +86,7 @@ class LLMCfg:
     top_p: float = 1.0
     max_tokens: int = 1024
     retries: int = 1
+    timeout: float | None = 120.0  # per-request seconds; None = SDK default
     lemmas: bool = False
     reasoning_effort: str | None = None  # global default; models may override
     batch_size: int | None = None  # None = single-sentence reference prompt

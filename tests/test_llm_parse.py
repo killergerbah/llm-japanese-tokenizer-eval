@@ -83,6 +83,67 @@ def test_parse_lemma_rejects_altered_text():
     assert not ok
 
 
+def test_parse_lemma_newline_delimiter():
+    text = "東京都に住む"
+    content = "東京→東京\n都→都\nに→に\n住む→住む"
+    spans, lemmas, ok = parse_segmentation_lemma(text, content, "／", "→")
+    assert ok
+    assert spans == [(0, 2), (2, 3), (3, 4), (4, 6)]
+    assert lemmas == ["東京", "都", "に", "住む"]
+
+
+def test_parse_lemma_newline_blanks_and_spaces():
+    text = "すしを食べた"
+    content = "\nすし→すし\n\n を→を \n食べた→食べる\n"
+    spans, lemmas, ok = parse_segmentation_lemma(text, content, "／", "→")
+    assert ok
+    assert spans == [(0, 2), (2, 3), (3, 6)]
+    assert lemmas == ["すし", "を", "食べる"]
+
+
+def test_parse_lemma_mixed_newline_and_delimiter():
+    text = "東京都に住む"
+    content = "東京→東京／都→都\nに→に／住む→住む"
+    spans, lemmas, ok = parse_segmentation_lemma(text, content, "／", "→")
+    assert ok
+    assert spans == [(0, 2), (2, 3), (3, 4), (4, 6)]
+    assert lemmas == ["東京", "都", "に", "住む"]
+
+
+def test_parse_lemma_strips_echoed_input_line():
+    text = "すしを食べた"
+    content = "すしを食べた\nすし→すし／を→を／食べた→食べる"
+    spans, lemmas, ok = parse_segmentation_lemma(text, content, "／", "→")
+    assert ok
+    assert spans == [(0, 2), (2, 3), (3, 6)]
+    assert lemmas == ["すし", "を", "食べる"]
+
+
+def test_parse_lemma_recovers_glued_trailing_punct():
+    text = "すしを食べた。"
+    content = "すし→すし／を→を／食べた→食べる。"
+    spans, lemmas, ok = parse_segmentation_lemma(text, content, "／", "→")
+    assert ok
+    assert spans == [(0, 2), (2, 3), (3, 6), (6, 7)]
+    assert lemmas == ["すし", "を", "食べる", "。"]
+
+
+def test_parse_lemma_recovers_omitted_trailing_punct():
+    text = "すしを食べた。"
+    content = "すし→すし／を→を／食べた→食べる"
+    spans, lemmas, ok = parse_segmentation_lemma(text, content, "／", "→")
+    assert ok
+    assert spans == [(0, 2), (2, 3), (3, 6), (6, 7)]
+    assert lemmas == ["すし", "を", "食べる", "。"]
+
+
+def test_parse_lemma_rejects_missing_non_punct_char():
+    text = "誠実さが感じられた。"
+    content = "誠実→誠実／が→が／感じ→感じる／られ→られる／た→た"
+    spans, lemmas, ok = parse_segmentation_lemma(text, content, "／", "→")
+    assert not ok
+
+
 def test_ollama_timings_extraction():
     payload = {
         "eval_count": 100,

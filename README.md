@@ -77,7 +77,7 @@ Outputs (all derived, safe to regenerate):
 - `results/raw/<treebank>/<model>[@bN][@lem].jsonl` — cached completions + timings
 - `results/scores/scores.jsonl` — merged across treebanks (primary artifact)
 - `results/comparisons/<treebank>/comparisons.jsonl` — paired deltas + McNemar
-- `results/figures/*.svg,*.png` — includes `batch_*`, `position_*`, and (cross run) `cross_*`
+- `results/figures/*.svg,*.png` — includes `main_*` (clean single-sentence summaries), `batch_*`, `position_*`, and (cross run) `cross_*`
 
 Notes:
 - Local models are GPU-serialized (one resident at a time); expect a long run.
@@ -209,6 +209,114 @@ pipeline stays runnable for free.
   `.venv/bin/tok-eval llm --models sakana-namazu`
 
 Both require a key and are region-gated for Namazu (unavailable EU/EEA/UK/CH).
+
+## Results and discussion
+
+A current snapshot, **not yet the full matrix**. Complete: single-sentence
+reference arms on both datasets, baselines, plus the UD-Japanese (`ja_gsd`)
+batch ablation. Intentionally **not** run for now: `llama3.1:8b` and
+`mistral-small3.1:24b` (local), KWDLC `qwen2.5:32b` and `sakana-namazu@lem`,
+and the KWDLC batch sweep (so KWDLC has no paired `compare` rows). Everything
+below is derived from `results/scores/scores.jsonl` and regenerates with:
+
+```sh
+.venv/bin/tok-eval --config config.yaml plot --all-treebanks
+```
+
+### Segmentation accuracy
+
+![Exact-word F1 by treebank](results/figures/main_word_f1.png)
+
+![Boundary F1 by treebank](results/figures/main_boundary_f1.png)
+
+| analyzer | ja_gsd word F1 | ja_gsd bnd F1 | KWDLC word F1 | KWDLC bnd F1 |
+|---|---|---|---|---|
+| MeCab + UniDic (baseline) | **0.991** | **0.997** | 0.852 | 0.945 |
+| Sudachi (baseline) | 0.946 | 0.980 | 0.815 | 0.931 |
+| deepseek-v4.1-flash (remote) | 0.858 | 0.944 | **0.811** | **0.929** |
+| sakana-namazu (remote) | 0.784 | 0.902 | 0.770 | 0.907 |
+| qwen2.5:32b (local) | 0.562 | 0.793 | — | — |
+| gemma3:27b (local) | 0.501 | 0.762 | 0.528 | 0.781 |
+
+- **UD-Japanese flatters MeCab+UniDic.** The baseline is near-perfect on
+  `ja_gsd` (0.99 word / 1.00 boundary F1) but loses ~14 points of exact-word F1
+  on KWDLC. Boundary F1 barely moves (0.997 → 0.945), so most of that gap is the
+  JUMAN/KNP convention and web-domain vocabulary, not segmentation capability.
+- **Sudachi is the convention-robust baseline.** It gives up ~4.5 points on UD
+  versus MeCab but drops far less across treebanks (0.946 → 0.815).
+- **Prompt-only LLMs are competent but below dedicated analyzers.** The best
+  remote model (deepseek) reaches 0.86 / 0.81 exact-word F1 and 0.94 / 0.93
+  boundary F1 — ~14 word-F1 points behind MeCab on UD and ~4 on KWDLC. Namazu
+  is a close second on both.
+- **Local 27B/32B models lag badly** (0.50–0.56 word F1). They emit the right
+  *format* (`parse_rate` 0.92–0.96) but choose different boundaries, i.e. this
+  is a genuine capability gap rather than a parsing artifact.
+
+### Error analysis: proper nouns and format
+
+![Word recall by gold-word category](results/figures/main_word_recall_by_category.png)
+
+*(UD Japanese, single-sentence tokenization arms.)*
+
+- **Errors concentrate in proper nouns.** deepseek recalls 0.80 of UD proper
+  nouns vs 0.82 overall; namazu 0.63; gemma only 0.37. Katakana and "other"
+  words are much easier. Unknown-name and compound segmentation is the main
+  weakness.
+- **Formatting is a separate failure axis.** `parse_rate` is poor for gemma's
+  lemma arm (0.63 UD / 0.67 KWDLC): it drops or folds away sentence-final
+  punctuation. The parser was hardened during this work to accept
+  newline-delimited output and recover trailing punctuation — namazu's UD lemma
+  parse rate rose from 0.52 to 0.89 — but genuinely dropped tokens remain and
+  score as zero, so gemma's lemma numbers are a lower bound.
+- One `ja_gsd` sentence is absent for `sakana-namazu` (HTTP 451 content-policy
+  block, `n=542`). Errors are excluded from the scored set rather than counted
+  as misses, so that arm is evaluated on one fewer sentence.
+
+### Lemma accuracy
+
+![Lemma accuracy by treebank](results/figures/main_lemma_accuracy.png)
+
+- **deepseek lemmatizes best** (0.864 UD / 0.964 KWDLC), narrowly ahead of
+  Sudachi (0.848 / 0.956).
+- **MeCab's lemma accuracy drops sharply on KWDLC** (0.908 → 0.758): this is
+  the UniDic katakana-lexeme convention versus JUMAN's surface-lemma convention
+  (see [Lemmatization caveat](#lemmatization-caveat)), not a dictionary-quality
+  problem.
+- gemma@lem is weakest (0.831 / 0.917) and has the worst coverage because of
+  its formatting drops.
+
+### Batch ablation (UD Japanese)
+
+![Exact-word F1 vs batch size](results/figures/batch_word_f1.png)
+
+- **Batching is not free.** The `@b1` control (batch prompt, one sentence) sits
+  close to the single-sentence reference; going to N=2–8 costs exact-word F1
+  monotonically for deepseek (0.858 → 0.812) and namazu (0.784 → 0.747). gemma
+  improves slightly at `@b1` (prompt wording) then degrades.
+- Per-sentence decode cost is essentially flat (deepseek ~50–52 generated
+  tokens/sentence from b1 to b8), so batching does not buy throughput either; it
+  mainly cuts HTTP round-trips.
+- Position effects are small — deepseek boundary F1 stays 0.925–0.928 across
+  positions in a batch — though gemma@lem@b8 falls from 0.636 at position 0 to
+  0.533 at position 7.
+
+### Throughput
+
+Local generation is roughly **9–10 eval tok/s** (gemma3:27b 10.3, qwen2.5:32b
+8.9 median). Baseline analyzers are CPU dictionaries and effectively instant on
+these sentence lengths. The remote providers do not report decode durations, so
+only wall-clock and token counts are cached for them.
+
+### Limitations
+
+- Partial model matrix (see snapshot above); KWDLC in particular has no local
+  LLM arms and no batch sweep, hence no paired comparisons there.
+- Single seed, `temperature=0`; bootstrap intervals reflect sentence
+  resampling only, not model stochasticity.
+- Cross-treebank deltas mix capability, domain, and annotation convention.
+- Baselines are dictionaries with their own conventions, not ground truth; the
+  "gap" to a human gold standard is not directly observable.
+- KWDLC has no declared license (research use only; not redistributed).
 
 ## Reproducibility
 

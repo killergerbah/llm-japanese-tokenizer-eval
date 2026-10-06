@@ -28,6 +28,11 @@ from .text import align_surfaces, norm_lemma, tokens_to_spans, validate_spans
 _DELIMS = ["\uff0f", "|", "\u2502", "/", "\t"]
 _SEPS = ["\u2192", "\u21d2", "=>", ":", "\t", "|"]
 
+# Sentence-final punctuation that some models fold into the last lemma or omit
+# from the surfaces entirely. Used only by the trailing-token recovery in
+# ``parse_segmentation_lemma``.
+_TRAILING_PUNCT = set("。、，．,.:：;；!?！？…‥・「」『』（）()[]{}〈〉《》【】—–-～~\"'“”‘’")
+
 # Reasoning models (qwen3, gpt-oss, ...) may wrap their chain-of-thought in
 # think blocks. The tags are assembled from split literals so the closing tag is
 # never present as one contiguous token in this source file.
@@ -95,19 +100,60 @@ def parse_segmentation(text: str, content: str, delim: str) -> tuple[list[tuple[
     return spans, bool(spans) and validate_spans(text, spans)
 
 
-def parse_segmentation_lemma(
-    text: str, content: str, delim: str, sep: str
-) -> tuple[list[tuple[int, int]], list[str], bool]:
-    """Parse ``surface<sep>lemma`` tokens joined by ``delim``."""
-    content = _clean(content)
+def _lemma_pairs(parts: list[str], sep: str) -> tuple[list[str], list[str]]:
+    """Split ``surface<sep>lemma`` records into parallel surface/lemma lists."""
     surfaces: list[str] = []
     lemmas: list[str] = []
-    for part in content.split(delim):
+    for part in parts:
         surface, found, lemma = part.partition(sep)
         surfaces.append(surface)
         lemmas.append(norm_lemma(lemma) if found else "")
-    if "".join(surfaces) == text:
+    return surfaces, lemmas
+
+
+def _is_trailing_punct(text: str) -> bool:
+    return bool(text) and all(ch in _TRAILING_PUNCT for ch in text)
+
+
+def parse_segmentation_lemma(
+    text: str, content: str, delim: str, sep: str
+) -> tuple[list[tuple[int, int]], list[str], bool]:
+    """Parse ``surface<sep>lemma`` tokens joined by ``delim``.
+
+    Models do not always honour the requested delimiter. Some (e.g.
+    sakana-namazu) emit one pair per line, others line-wrap a ``delim``-joined
+    response; newline is therefore accepted as an alternative delimiter, and
+    blank parts (trailing/blank lines) and surrounding whitespace are ignored.
+    A leading line that merely echoes the input is dropped. Finally,
+    sentence-final punctuation that a model folded into the last lemma (or
+    omitted from the surfaces) is recovered when it is the only missing text.
+    """
+    content = _clean(content)
+    lines = content.split("\n")
+    if len(lines) > 1 and lines[0].strip() == text:
+        content = "\n".join(lines[1:])
+
+    re_split = re.compile("[" + re.escape(delim) + "\n]")
+    for parts in (content.split(delim), content.split("\n"), re_split.split(content)):
+        for candidate in (parts, [p.strip() for p in parts]):
+            candidate = [p for p in candidate if p]
+            if not candidate:
+                continue
+            surfaces, lemmas = _lemma_pairs(candidate, sep)
+            if "".join(surfaces) == text:
+                return tokens_to_spans(surfaces), lemmas, True
+
+    parts = [p for p in content.split(delim) if p]
+    surfaces, lemmas = _lemma_pairs(parts, sep)
+    joined = "".join(surfaces)
+    tail = text[len(joined) :] if joined and text.startswith(joined) else ""
+    if _is_trailing_punct(tail):
+        if lemmas and lemmas[-1].endswith(tail):
+            lemmas[-1] = lemmas[-1][: -len(tail)]
+        surfaces.append(tail)
+        lemmas.append(tail)
         return tokens_to_spans(surfaces), lemmas, True
+
     return [], [], False
 
 
@@ -382,7 +428,12 @@ def run(
         raw_path = cfg.raw_path(analyzer)
         cache = {r["key"]: r for r in read_jsonl(raw_path)}
         client = (
-            OpenAI(base_url=base_url, api_key=model.resolved_api_key())
+            OpenAI(
+                base_url=base_url,
+                api_key=model.resolved_api_key(),
+                timeout=cfg.llm.timeout,
+                max_retries=cfg.llm.retries,
+            )
             if model.api == "openai"
             else None
         )

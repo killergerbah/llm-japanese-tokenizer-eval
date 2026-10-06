@@ -25,19 +25,19 @@ LIMIT_ARG=()
 if [[ -n "${LIMIT:-}" ]]; then LIMIT_ARG=(--limit "$LIMIT"); fi
 
 echo "==================== dataset: ${CONFIG} ===================="
-"$TOK" --config "$CONFIG" prepare "${LIMIT_ARG[@]}"
+"$TOK" --config "$CONFIG" prepare ${LIMIT_ARG[@]+"${LIMIT_ARG[@]}"}
 "$TOK" --config "$CONFIG" baseline --analyzers "$ANALYZERS"
 
 echo "---- reference: tokenization ----"
-"$TOK" --config "$CONFIG" llm --models "$MODELS" "${LIMIT_ARG[@]}"
+"$TOK" --config "$CONFIG" llm --models "$MODELS" ${LIMIT_ARG[@]+"${LIMIT_ARG[@]}"}
 echo "---- reference: tokenization + lemma ----"
-"$TOK" --config "$CONFIG" llm --models "$MODELS" --lemmas "${LIMIT_ARG[@]}"
+"$TOK" --config "$CONFIG" llm --models "$MODELS" --lemmas ${LIMIT_ARG[@]+"${LIMIT_ARG[@]}"}
 
 for n in $BATCHES; do
   echo "---- batch N=${n}: tokenization ----"
-  "$TOK" --config "$CONFIG" llm --models "$MODELS" --batch-size "$n" "${LIMIT_ARG[@]}"
+  "$TOK" --config "$CONFIG" llm --models "$MODELS" --batch-size "$n" ${LIMIT_ARG[@]+"${LIMIT_ARG[@]}"}
   echo "---- batch N=${n}: tokenization + lemma ----"
-  "$TOK" --config "$CONFIG" llm --models "$MODELS" --batch-size "$n" --lemmas "${LIMIT_ARG[@]}"
+  "$TOK" --config "$CONFIG" llm --models "$MODELS" --batch-size "$n" --lemmas ${LIMIT_ARG[@]+"${LIMIT_ARG[@]}"}
 done
 
 echo "---- scoring + comparison + figures ----"
