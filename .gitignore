@@ -3,7 +3,22 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .env
-results*/
+
+# Gold data is not redistributable (UD treebanks are CC-licensed; KWDLC has no
+# declared license). Regenerate with `tok-eval prepare` from the pinned sources.
 data/gold/*/raw/
 data/gold/*/gold.jsonl
+
+# Results: raw completion caches embed the (license-restricted) gold sentence
+# text, and both they and the per-sentence predictions are large. Publish only
+# the text-free derived artifacts so the README figures render and the reported
+# numbers stay auditable/reproducible.
+results/*
+!results/figures/
+!results/figures/**
+!results/scores/
+!results/scores/**
+!results/comparisons/
+!results/comparisons/**
+
 .DS_Store
